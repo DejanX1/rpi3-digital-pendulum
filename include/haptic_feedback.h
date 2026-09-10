@@ -1,21 +1,6 @@
 #ifndef HAPTIC_FEEDBACK_H
 #define HAPTIC_FEEDBACK_H
 
-/*
- * Wire format for /dev/haptic_feedback, shared verbatim between the
- * kernel driver and user-space (Task 3, on wall collision). Only
- * <linux/ioctl.h> / <linux/types.h> are used so this header compiles
- * unmodified in both contexts (standard practice for Linux uapi headers).
- *
- * Two ways to trigger a pulse are exposed, both carrying the same
- * struct haptic_pulse payload:
- *   - write(fd, &pulse, sizeof(pulse))   simple path, no return status
- *   - ioctl(fd, HAPTIC_IOC_PULSE, &pulse) same effect, plus an errno-style
- *                                         return value from the driver
- * The driver must accept either; user space picks one based on whether it
- * needs the ioctl return code.
- */
-
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
