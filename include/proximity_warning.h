@@ -1,7 +1,6 @@
 #ifndef PROXIMITY_WARNING_H
 #define PROXIMITY_WARNING_H
 
-
 #define PROXIMITY_WARNING_SYSFS_PATH "/sys/kernel/pendulum/proximity_warning"
 
 #define PROXIMITY_WARNING_MAX_LEN 16

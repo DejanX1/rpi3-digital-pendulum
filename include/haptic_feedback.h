@@ -1,7 +1,6 @@
 #ifndef HAPTIC_FEEDBACK_H
 #define HAPTIC_FEEDBACK_H
 
-
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
