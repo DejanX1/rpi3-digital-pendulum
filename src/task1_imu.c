@@ -1,8 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * Task 1: IMU Acquisition (SCHED_FIFO 99, 5 ms / 200 Hz).
- *
  * Periodically reads LSM9DS1 over I2C, computes accelerometer-only tilt, and updates shared_state.
  * Uses clock_nanosleep (CLOCK_MONOTONIC, TIMER_ABSTIME) to prevent drift.
  */
@@ -33,8 +31,7 @@ static uint64_t timespec_to_ns(const struct timespec *t)
     return (uint64_t)t->tv_sec * (uint64_t)NSEC_PER_SEC + (uint64_t)t->tv_nsec;
 }
 
-/* Accelerometer-only pitch/roll. Verify axis orientation during 
- * display testing; signs may need adjustment depending on mounting. */
+/* Computes pitch and roll angles from raw accelerometer data. */
 static void tilt_from_accel(const lsm9ds1_vector_t *g, float *pitch_deg, float *roll_deg)
 {
     *pitch_deg = atan2f(-g->x, sqrtf(g->y * g->y + g->z * g->z)) * RAD_TO_DEG_F;
