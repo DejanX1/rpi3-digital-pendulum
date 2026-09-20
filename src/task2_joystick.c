@@ -1,15 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * Task 2: Joystick interrupt handling (SCHED_FIFO 90).
- *
- * See include/task2_joystick.h for why this uses the Linux input
- * subsystem (poll()/read() on /dev/input/eventN) instead of a raw GPIO
- * IRQ handler. Key codes below were confirmed on real hardware with a
- * throwaway probe (tests/probe_joystick_keys.c, not committed):
- *   KEY_UP=103 KEY_DOWN=108 KEY_LEFT=105 KEY_RIGHT=106 KEY_ENTER=28
- * each press produced exactly one value=1/value=0 pair - the ATtiny88
- * firmware already debounces, no extra debounce logic needed here.
+ * Joystick interrupt handling
  */
 
 #include "task2_joystick.h"
@@ -25,9 +17,6 @@
 #define JOYSTICK_DEVICE_NAME "Sense HAT Joystick"
 #define POLL_TIMEOUT_MS 200 /* how often we re-check the running flag */
 
-/* Same discovery pattern as test-hardver/led_matrix/led_sos.c: match by
- * name via sysfs rather than hardcoding "event2", since the index isn't
- * guaranteed stable across boots/kernels. */
 static int open_joystick_device(void)
 {
     for (int index = 0; index < 32; ++index) {
