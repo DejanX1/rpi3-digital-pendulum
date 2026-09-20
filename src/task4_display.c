@@ -1,22 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
 
-/*
- * Task 4: Display & telemetry thread (SCHED_OTHER, 40 ms / 25 FPS).
- *
- * Renders shared_state's ball position as a single lit pixel on the
- * Sense HAT LED matrix, and periodically logs the coordinates to the
- * system log (assignment: "слање тренутних координата на системски
- * лог"). Not the final polished animation (no trail, no color coding by
- * speed/mode etc.) - just a real, correctly positioned dot, since the
- * point of this task was proving the render path works against the
- * live ball state (see Task #16's physics thread).
- *
- * Framebuffer auto-discovery mirrors test-hardver/led_matrix/led_sos.c:
- * match by name via /sys/class/graphics/fbN/name rather than hardcoding
- * "/dev/fb0" - already confirmed on this RPi that the Sense HAT isn't
- * always fb0 (depends on what else is registered first).
- */
-
 #include "task4_display.h"
 
 #include <errno.h>
@@ -35,9 +18,6 @@
 #define COLOR_OFF   0x0000
 #define BALL_COLOR  0xFFFF /* white, RGB565 */
 
-/* Log coordinates roughly once a second instead of every 40ms frame -
- * still satisfies "send current coordinates to system log" without
- * flooding it at 25 lines/sec for the app's whole runtime. */
 #define TELEMETRY_EVERY_N_FRAMES 25
 
 static void timespec_add_ns(struct timespec *t, long ns)
