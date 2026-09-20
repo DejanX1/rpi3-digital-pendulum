@@ -1,5 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
+/*
+ * Joystick interrupt handling
+ */
 
 #include "task2_joystick.h"
 
@@ -14,9 +17,6 @@
 #define JOYSTICK_DEVICE_NAME "Sense HAT Joystick"
 #define POLL_TIMEOUT_MS 200 /* how often we re-check the running flag */
 
-/* Same discovery pattern as test-hardver/led_matrix/led_sos.c: match by
- * name via sysfs rather than hardcoding "event2", since the index isn't
- * guaranteed stable across boots/kernels. */
 static int open_joystick_device(void)
 {
     for (int index = 0; index < 32; ++index) {
