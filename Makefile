@@ -17,7 +17,8 @@ SOURCES := src/main.c \
            src/task2_joystick.c \
            src/task3_physics.c \
            src/task4_display.c \
-           src/lsm9ds1.c
+           src/lsm9ds1.c \
+           src/driver_io.c
 OBJECTS := $(SOURCES:.c=.o)
 
 all: $(TARGET)

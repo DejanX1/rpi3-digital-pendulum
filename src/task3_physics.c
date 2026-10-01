@@ -6,6 +6,8 @@
  */
 
 #include "task3_physics.h"
+#include "driver_io.h"
+#include "proximity_warning.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -48,6 +50,24 @@
  * against the wall and re-trigger the impact. */
 #define BOUNCE_MIN_SPEED 0.3f
 
+/*
+ * Impact speed to buzzer pulse. The upper bound comes from measurements on
+ * the mounted board, where hits ran from a gentle touch up to about
+ * 10 cells/s. Speed drives pitch and duration, as the assignment asks,
+ * and volume along with them.
+ */
+#define IMPACT_SPEED_MAX    10.0f
+#define HAPTIC_MIN_IMPACT   0.3f /* slower than this is the ball settling, not a hit */
+#define HAPTIC_FORCE_MIN    30
+#define HAPTIC_FORCE_MAX    100
+#define HAPTIC_FREQ_MIN     500
+#define HAPTIC_FREQ_MAX     2500
+#define HAPTIC_DURATION_MIN 50
+#define HAPTIC_DURATION_MAX 200
+
+/* The assignment puts the early warning at exactly one LED cell from a wall. */
+#define PROXIMITY_DISTANCE 1.0f
+
 static void timespec_add_ns(struct timespec *t, long ns)
 {
     t->tv_nsec += ns;
@@ -55,6 +75,46 @@ static void timespec_add_ns(struct timespec *t, long ns)
         t->tv_nsec -= NSEC_PER_SEC;
         t->tv_sec += 1;
     }
+}
+
+/* Turns an impact into a pulse: harder hits are louder, higher pitched and
+ * longer. Gentle contacts are skipped so the buzzer does not click every
+ * time the ball drifts into a wall it is already resting against. */
+static void sound_impact(const driver_io_t *io, float impact_speed)
+{
+    float ratio;
+
+    if (impact_speed < HAPTIC_MIN_IMPACT)
+        return;
+
+    ratio = impact_speed / IMPACT_SPEED_MAX;
+    if (ratio > 1.0f)
+        ratio = 1.0f;
+
+    driver_io_haptic_pulse(io,
+        HAPTIC_FORCE_MIN    + (int)(ratio * (HAPTIC_FORCE_MAX - HAPTIC_FORCE_MIN)),
+        HAPTIC_FREQ_MIN     + (int)(ratio * (HAPTIC_FREQ_MAX - HAPTIC_FREQ_MIN)),
+        HAPTIC_DURATION_MIN + (int)(ratio * (HAPTIC_DURATION_MAX - HAPTIC_DURATION_MIN)));
+}
+
+/* Which wall the ball is dangerously close to, or DIR_NONE when it is clear
+ * of all of them. In a corner the nearer wall wins. */
+static direction_t threat_direction(const ball_state_t *ball)
+{
+    float nearest = ball->pos_x - GRID_MIN; /* distance to the west wall */
+    direction_t dir = DIR_WEST;
+    float distance;
+
+    distance = GRID_MAX - ball->pos_x;
+    if (distance < nearest) { nearest = distance; dir = DIR_EAST; }
+
+    distance = ball->pos_y - GRID_MIN;
+    if (distance < nearest) { nearest = distance; dir = DIR_NORTH; }
+
+    distance = GRID_MAX - ball->pos_y;
+    if (distance < nearest) { nearest = distance; dir = DIR_SOUTH; }
+
+    return (nearest <= PROXIMITY_DISTANCE) ? dir : DIR_NONE;
 }
 
 static const char *direction_name(direction_t dir)
@@ -105,6 +165,15 @@ void *task3_physics_thread(void *arg)
     const float dt = PERIOD_NS / (float)NSEC_PER_SEC;
     bool touching_x = false;
     bool touching_y = false;
+    direction_t reported_threat = DIR_NONE;
+    driver_io_t io;
+
+    /* Warns once per interface if a module is not loaded, and the calls below
+     * then do nothing - the simulation still runs, just silently. */
+    driver_io_open(&io);
+
+    /* Start from a known state, in case a previous run left a stale warning. */
+    driver_io_proximity_report(&io, DIR_NONE, PROXIMITY_RISK_SAFE);
 
     clock_gettime(CLOCK_MONOTONIC, &next);
 
@@ -177,6 +246,7 @@ void *task3_physics_thread(void *arg)
             direction_t dir = (ball.pos_x <= GRID_MIN) ? DIR_WEST : DIR_EAST;
 
             shared_state_set_collision(state, dir);
+            sound_impact(&io, impact_x);
             syslog(LOG_INFO, "collision %s at %.2f cells/s",
                    direction_name(dir), impact_x);
         }
@@ -185,6 +255,7 @@ void *task3_physics_thread(void *arg)
             direction_t dir = (ball.pos_y <= GRID_MIN) ? DIR_NORTH : DIR_SOUTH;
 
             shared_state_set_collision(state, dir);
+            sound_impact(&io, impact_y);
             syslog(LOG_INFO, "collision %s at %.2f cells/s",
                    direction_name(dir), impact_y);
         }
@@ -192,11 +263,31 @@ void *task3_physics_thread(void *arg)
         touching_x = hit_x;
         touching_y = hit_y;
 
+        /* Early warning: report only when the threatened wall changes, so the
+         * sysfs attribute is written on transitions instead of 50 times a
+         * second while the ball lingers near an edge. */
+        {
+            direction_t threat = threat_direction(&ball);
+
+            if (threat != reported_threat) {
+                driver_io_proximity_report(&io, threat,
+                                           threat == DIR_NONE ? PROXIMITY_RISK_SAFE
+                                                              : PROXIMITY_RISK_WARNING);
+                reported_threat = threat;
+            }
+        }
+
         shared_state_set_ball(state, ball);
 
         timespec_add_ns(&next, PERIOD_NS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
     }
+
+    /* Leave the warning cleared on the way out, the way the display thread
+     * clears the matrix - otherwise an external reader would keep seeing a
+     * threat long after the program stopped. */
+    driver_io_proximity_report(&io, DIR_NONE, PROXIMITY_RISK_SAFE);
+    driver_io_close(&io);
 
     return NULL;
 }
