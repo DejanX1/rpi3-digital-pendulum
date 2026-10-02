@@ -35,6 +35,17 @@ void lsm9ds1_close(int fd);
 int lsm9ds1_read_who_am_i(int fd, uint8_t *value);
 int lsm9ds1_init(int fd);
 
+/*
+ * Averages the gyroscope for about a second to find its zero-rate offset -
+ * the small non-zero reading it gives while standing still, which would
+ * otherwise make an integrated angle drift away on its own.
+ *
+ * Call after lsm9ds1_init(), with the board at rest. If it was moving, the
+ * average would be meaningless, so this returns -1 with errno EAGAIN and
+ * leaves *bias zeroed. Subtract *bias from gyro readings afterwards.
+ */
+int lsm9ds1_calibrate_gyro(int fd, lsm9ds1_vector_t *bias);
+
 int lsm9ds1_read_accel_raw(int fd, lsm9ds1_raw_vector_t *raw);
 int lsm9ds1_read_gyro_raw(int fd, lsm9ds1_raw_vector_t *raw);
 int lsm9ds1_read_sample(int fd, lsm9ds1_sample_t *sample);

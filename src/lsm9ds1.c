@@ -175,6 +175,85 @@ int lsm9ds1_init(int fd)
     return 0;
 }
 
+/* About a second of samples: long enough to average the noise down, short
+ * enough not to hold up startup. */
+#define GYRO_CALIBRATION_SAMPLES 200
+#define GYRO_CALIBRATION_GAP_MS  5
+
+/* Peak-to-peak spread that marks the board as "not still". Set well above
+ * the sensor's own noise, measured at rest on this board, and well below
+ * anything a hand movement produces. */
+#define GYRO_CALIBRATION_MAX_SPREAD 0.35f /* rad/s */
+
+int lsm9ds1_calibrate_gyro(int fd, lsm9ds1_vector_t *bias)
+{
+    const struct timespec gap = {
+        .tv_sec = 0,
+        .tv_nsec = GYRO_CALIBRATION_GAP_MS * 1000L * 1000L
+    };
+    lsm9ds1_vector_t sum = { 0.0f, 0.0f, 0.0f };
+    lsm9ds1_vector_t lowest = { 0.0f, 0.0f, 0.0f };
+    lsm9ds1_vector_t highest = { 0.0f, 0.0f, 0.0f };
+    float spread;
+    int i;
+
+    if (bias == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    bias->x = 0.0f;
+    bias->y = 0.0f;
+    bias->z = 0.0f;
+
+    for (i = 0; i < GYRO_CALIBRATION_SAMPLES; i++) {
+        lsm9ds1_raw_vector_t raw;
+        lsm9ds1_vector_t rate;
+
+        if (lsm9ds1_read_gyro_raw(fd, &raw) < 0)
+            return -1;
+
+        rate.x = raw.x * GYRO_DPS_PER_LSB * DEG_TO_RAD;
+        rate.y = raw.y * GYRO_DPS_PER_LSB * DEG_TO_RAD;
+        rate.z = raw.z * GYRO_DPS_PER_LSB * DEG_TO_RAD;
+
+        if (i == 0) {
+            lowest = rate;
+            highest = rate;
+        } else {
+            if (rate.x < lowest.x)  lowest.x = rate.x;
+            if (rate.y < lowest.y)  lowest.y = rate.y;
+            if (rate.z < lowest.z)  lowest.z = rate.z;
+            if (rate.x > highest.x) highest.x = rate.x;
+            if (rate.y > highest.y) highest.y = rate.y;
+            if (rate.z > highest.z) highest.z = rate.z;
+        }
+
+        sum.x += rate.x;
+        sum.y += rate.y;
+        sum.z += rate.z;
+
+        nanosleep(&gap, NULL);
+    }
+
+    spread = highest.x - lowest.x;
+    if (highest.y - lowest.y > spread)
+        spread = highest.y - lowest.y;
+    if (highest.z - lowest.z > spread)
+        spread = highest.z - lowest.z;
+
+    if (spread > GYRO_CALIBRATION_MAX_SPREAD) {
+        errno = EAGAIN;
+        return -1;
+    }
+
+    bias->x = sum.x / GYRO_CALIBRATION_SAMPLES;
+    bias->y = sum.y / GYRO_CALIBRATION_SAMPLES;
+    bias->z = sum.z / GYRO_CALIBRATION_SAMPLES;
+
+    return 0;
+}
+
 int lsm9ds1_read_accel_raw(int fd, lsm9ds1_raw_vector_t *raw)
 {
     return read_raw_vector(fd, REG_OUT_X_L_XL, raw);
