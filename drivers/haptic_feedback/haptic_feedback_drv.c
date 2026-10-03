@@ -27,6 +27,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include <linux/hrtimer.h>
+#include <linux/version.h>
 #include <linux/ktime.h>
 #include <linux/spinlock.h>
 #include <linux/math64.h>
@@ -276,8 +277,20 @@ static int __init haptic_init(void)
 	}
 
 	spin_lock_init(&haptic_dev.lock);
+
+	/*
+	 * hrtimer_setup() replaced the hrtimer_init() + .function pair, and the
+	 * old form was then removed, so neither spelling works everywhere. Both
+	 * Pis in use need a different one: 6.12 has only hrtimer_init, 6.18 has
+	 * only hrtimer_setup. The 6.15 cut-off is where the new call appeared.
+	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
 	hrtimer_setup(&haptic_dev.timer, haptic_timer_cb, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_REL);
+#else
+	hrtimer_init(&haptic_dev.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	haptic_dev.timer.function = haptic_timer_cb;
+#endif
 
 	bcm2837_gpio_set_output(&haptic_dev);
 	bcm2837_gpio_write(&haptic_dev, false);
