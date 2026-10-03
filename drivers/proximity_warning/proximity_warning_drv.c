@@ -75,9 +75,13 @@ static ssize_t proximity_warning_store(struct kobject *kobj,
 }
 
 /* __ATTR(proximity_warning, ...) -> the sysfs file is named
- * "proximity_warning", matching PROXIMITY_WARNING_SYSFS_PATH. */
+ * "proximity_warning", matching PROXIMITY_WARNING_SYSFS_PATH.
+ *
+ * 0664, not 0660: any process on the system must be able to read the
+ * warning, which is the point of publishing it here. Writing stays
+ * privileged - only Task 3 writes, and it already runs as root. */
 static struct kobj_attribute proximity_attr =
-	__ATTR(proximity_warning, 0660, proximity_warning_show, proximity_warning_store);
+	__ATTR(proximity_warning, 0664, proximity_warning_show, proximity_warning_store);
 
 static int __init proximity_warning_init(void)
 {
