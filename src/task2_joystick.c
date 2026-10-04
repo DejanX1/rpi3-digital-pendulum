@@ -101,8 +101,7 @@ void *task2_joystick_thread(void *arg)
             continue;
 
         if (ev.code == KEY_ENTER) {
-            system_mode_t current = shared_state_get_mode(state);
-            shared_state_set_mode(state, current == MODE_GYRO ? MODE_MANUAL : MODE_GYRO);
+            shared_state_toggle_mode(state);
         } else {
             direction_t dir = direction_from_key(ev.code);
             if (dir != DIR_NONE)
