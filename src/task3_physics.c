@@ -19,6 +19,7 @@
 
 #define GRID_MIN 0.0f
 #define GRID_MAX 7.0f
+#define GRID_CELL_MAX 7 /* highest LED index, same grid counted in cells */
 
 /*
  * Mode 1 (tilt): acceleration from tilt, and the air-cushion drag that
@@ -66,7 +67,11 @@
 #define HAPTIC_DURATION_MAX 200
 
 /* The assignment puts the early warning at exactly one LED cell from a wall. */
-#define PROXIMITY_DISTANCE 1.0f
+#define PROXIMITY_CELLS 1
+
+/* Slower than this on an axis counts as not travelling along it, so a ball
+ * barely drifting at a corner does not flip the reported wall to and fro. */
+#define THREAT_MIN_SPEED 0.2f /* cells / s */
 
 static void timespec_add_ns(struct timespec *t, long ns)
 {
@@ -97,24 +102,68 @@ static void sound_impact(const driver_io_t *io, float impact_speed)
         HAPTIC_DURATION_MIN + (int)(ratio * (HAPTIC_DURATION_MAX - HAPTIC_DURATION_MIN)));
 }
 
-/* Which wall the ball is dangerously close to, or DIR_NONE when it is clear
- * of all of them. In a corner the nearer wall wins. */
+/* The cell the ball lights up, rounded the way the display thread rounds it.
+ * The warning is judged on this and not on pos_x/pos_y, so that it turns on
+ * and off exactly when the lit LED moves, never halfway across one. */
+static int cell_of(float pos)
+{
+    int cell = (int)(pos + 0.5f);
+
+    if (cell < 0)
+        cell = 0;
+    if (cell > GRID_CELL_MAX)
+        cell = GRID_CELL_MAX;
+    return cell;
+}
+
+/*
+ * The wall the ball is about to hit: the one exactly PROXIMITY_CELLS away
+ * from the cell it occupies, or DIR_NONE when no wall is that close.
+ *
+ * A wall the ball already rests against is zero cells away and is on purpose
+ * not reported. That is an impact the buzzer has announced, not a warning -
+ * and reporting it would mask the wall the ball is actually travelling
+ * towards: sliding along the bottom row would read SOUTH the whole way, and
+ * the far wall it is heading for would never be named.
+ */
 static direction_t threat_direction(const ball_state_t *ball)
 {
-    float nearest = ball->pos_x - GRID_MIN; /* distance to the west wall */
-    direction_t dir = DIR_WEST;
-    float distance;
+    int x = cell_of(ball->pos_x);
+    int y = cell_of(ball->pos_y);
+    bool at_west  = (x == PROXIMITY_CELLS);
+    bool at_east  = (GRID_CELL_MAX - x == PROXIMITY_CELLS);
+    bool at_north = (y == PROXIMITY_CELLS);
+    bool at_south = (GRID_CELL_MAX - y == PROXIMITY_CELLS);
 
-    distance = GRID_MAX - ball->pos_x;
-    if (distance < nearest) { nearest = distance; dir = DIR_EAST; }
+    /*
+     * On the corners of the ring two walls are one cell away at once, and
+     * the one being approached has to win. Otherwise the wall the ball
+     * merely travels alongside keeps the warning to itself: running down
+     * the second-to-last column, east stays one cell away the whole way,
+     * and south would never be named before the ball reaches it.
+     */
+    if (at_west  && ball->vel_x <= -THREAT_MIN_SPEED)
+        return DIR_WEST;
+    if (at_east  && ball->vel_x >=  THREAT_MIN_SPEED)
+        return DIR_EAST;
+    if (at_north && ball->vel_y <= -THREAT_MIN_SPEED)
+        return DIR_NORTH;
+    if (at_south && ball->vel_y >=  THREAT_MIN_SPEED)
+        return DIR_SOUTH;
 
-    distance = ball->pos_y - GRID_MIN;
-    if (distance < nearest) { nearest = distance; dir = DIR_NORTH; }
+    /* No wall is being approached - the ball is drifting away from one, or
+     * resting beside it. Still report it: the warning is meant to hold for
+     * the whole time the ball is one cell out, coming or going. */
+    if (at_west)
+        return DIR_WEST;
+    if (at_east)
+        return DIR_EAST;
+    if (at_north)
+        return DIR_NORTH;
+    if (at_south)
+        return DIR_SOUTH;
 
-    distance = GRID_MAX - ball->pos_y;
-    if (distance < nearest) { nearest = distance; dir = DIR_SOUTH; }
-
-    return (nearest <= PROXIMITY_DISTANCE) ? dir : DIR_NONE;
+    return DIR_NONE;
 }
 
 static const char *direction_name(direction_t dir)
