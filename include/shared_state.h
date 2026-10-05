@@ -149,6 +149,28 @@ static inline system_mode_t shared_state_get_mode(shared_state_t *s)
     return out;
 }
 
+/*
+ * Flips the mode and returns the one now in force. Landing in manual also
+ * forgets the direction last pushed on the joystick: it was latched to keep
+ * the ball moving without holding the stick, and without this it would
+ * revive on the way back in and move the ball before it is touched.
+ *
+ * Both under one lock, so Task 3 can never read the new mode beside the
+ * direction belonging to the old one.
+ */
+static inline system_mode_t shared_state_toggle_mode(shared_state_t *s)
+{
+    system_mode_t out;
+
+    pthread_mutex_lock(&s->lock);
+    s->mode = (s->mode == MODE_GYRO) ? MODE_MANUAL : MODE_GYRO;
+    if (s->mode == MODE_MANUAL)
+        s->manual_direction = DIR_NONE;
+    out = s->mode;
+    pthread_mutex_unlock(&s->lock);
+    return out;
+}
+
 /* --- manual_direction: Task 2 writes, Task 3 reads --- */
 
 static inline void shared_state_set_manual_direction(shared_state_t *s,
